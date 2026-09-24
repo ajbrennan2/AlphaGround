@@ -1,30 +1,37 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Rocketship } from "./Rocketship";
-import { useEffect, useRef } from "react";
-import * as THREE from "three";
+import { memo, Suspense, useLayoutEffect, useRef } from "react";
+import { Euler, MathUtils } from "three";
+import { useTelemetry } from "./useTelemetry";
 
-export default function ThreeScene({ orientation }) {
+function OrientedRocket({ store }) {
+    const orientation = useTelemetry(store, "acc");
     const rocketRef = useRef();
+    const euler = useRef(new Euler(0, 0, 0, "ZYX"));
+    const invalidate = useThree(state => state.invalidate);
 
-    useEffect(() => {
-        if (!rocketRef.current || !orientation) return;
+    useLayoutEffect(() => {
+        if (!rocketRef.current || !orientation.every(Number.isFinite)) return;
+        // Preserve the existing display axes pending hardware calibration.
+        const [yaw, pitch, roll] = orientation.map(MathUtils.degToRad);
+        euler.current.set(-pitch, -yaw, -roll, "ZYX");
+        rocketRef.current.quaternion.setFromEuler(euler.current);
+        invalidate();
+    }, [orientation, invalidate]);
 
-        const yaw = (orientation[0] * Math.PI) / 180;
-        const pitch = (orientation[1] * Math.PI) / 180;
-        const roll = (orientation[2] * Math.PI) / 180;
+    return <Rocketship ref={rocketRef} />;
+}
 
-        // BNO055 → Three.js axis mapping
-        const euler = new THREE.Euler(-pitch, -yaw, -roll, "ZYX");
-
-        rocketRef.current.quaternion.setFromEuler(euler);
-    }, [orientation]);
-
+const ThreeScene = memo(function ThreeScene({ store }) {
     return (
-        <Canvas style={{ width: "100%", height: "30%" }} camera={{ fov: 10 }}>
-            <Rocketship ref={rocketRef} />
-
+        <Canvas dpr={1} gl={{ antialias: false, powerPreference: "low-power", stencil: false }} frameloop="demand" style={{ width: "100%", height: "100%" }} camera={{ fov: 10 }}>
+            <Suspense fallback={null}>
+                <OrientedRocket store={store} />
+            </Suspense>
             <ambientLight intensity={5} />
             <directionalLight position={[0, 0, 5]} />
         </Canvas>
     );
-}
+});
+
+export default ThreeScene;

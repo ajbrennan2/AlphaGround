@@ -1,18 +1,52 @@
-import * as React from "react";
-import "./App.css";
+import { memo } from "react";
+import chroma from "chroma-js";
+import { useTelemetry } from "./useTelemetry";
 
-const Plumbing = (props) => (
+const colorscale = chroma.scale(["green", "yellow", "red"]);
+
+function PressureCloud({ store, index, multiplier, stale, ...pathProps }) {
+    const pressures = useTelemetry(store, "pressures");
+    const value = pressures[index];
+    const fill = !stale && Number.isFinite(value)
+        ? colorscale(Math.abs(value * multiplier) / 1000).hex()
+        : "#87939d";
+    return <path {...pathProps} fill={fill} />;
+}
+
+function Solenoid({ store, index, sendCommand, controlsDisabled, stale, ...pathProps }) {
+    const solenoids = useTelemetry(store, "solenoids");
+    const value = solenoids[index];
+    const unknown = stale || value === null;
+    const disabled = controlsDisabled || unknown;
+    const toggle = () => {
+        const current = store.getLatest().solenoids[index];
+        if (!disabled && (current === 0 || current === 1)) sendCommand(index * 2 + (current ? 1 : 0));
+    };
+    return <path {...pathProps} className="solenoid" role="button" tabIndex={disabled ? -1 : 0}
+        aria-label={`Solenoid ${index + 1}: ${unknown ? 'unknown' : value ? 'open' : 'closed'}`}
+        aria-disabled={disabled} aria-pressed={value === 1 && !unknown}
+        onClick={toggle} onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
+        }} fill={unknown ? "#87939d" : value ? "green" : "red"} />;
+}
+
+// The large static drawing renders once. Only six small paths subscribe to data.
+const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled = false, stale = false }) {
+    return (
     <svg
         xmlns="http://www.w3.org/2000/svg"
         xmlns:lucid="lucid"
         xmlnsXlink="http://www.w3.org/1999/xlink"
         viewBox="0 0 1036.49 509.28"
         style={{
+            padding: "10px",
             width: "100%",
             height: "auto",
             maxWidth: "100%",
         }}
-        {...props}
+        className="plumbing-diagram"
+        role="group"
+        aria-label="Original Alpha plumbing schematic"
     >
         <g
             lucid:page-tab-id="0_0"
@@ -217,8 +251,11 @@ const Plumbing = (props) => (
                 stroke="#1071e5"
                 d="M990.5 150h49m-49 0h-.5m49.5 0h.5"
             />
-            <path
-                fill={props.cloud2color}
+            <PressureCloud
+                stale={stale}
+                store={store}
+                index={1}
+                multiplier={1}
                 stroke="#1071e5"
                 strokeWidth={2}
                 d="M1080 100c0-5.52-4.48-10-10-10s-10 4.48-10 10 4.48 10 10 10 10-4.48 10-10z"
@@ -308,8 +345,11 @@ const Plumbing = (props) => (
                 stroke="#e81313"
                 d="M1040 380.5V394a6 6 0 0 1-6 6h-63.5m69.5-19.5v-.5m-69.5 20h-.5m-43.5 0h23m-22.97 0H926m23.5 0h.5m-89.5 0h69m-69 0h-.5m69.5 0h.5"
             />
-            <path
-                fill={props.cloudcolor}
+            <PressureCloud
+                stale={stale}
+                store={store}
+                index={0}
+                multiplier={300}
                 stroke="#e81313"
                 strokeWidth={2}
                 d="M810 370c0-5.52-4.48-10-10-10s-10 4.48-10 10 4.48 10 10 10 10-4.48 10-10z"
@@ -454,16 +494,12 @@ const Plumbing = (props) => (
                 fill="none"
                 d="M950 126a6 6 0 0 1 6-6h28a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6h-28a6 6 0 0 1-6-6z"
             />
-            <path
-                className="solenoid"
-                onClick={() => {
-                    props.sendCommand(
-                        props.alpha.solenoids[1]
-                            ? props.COMMANDS.S2_OFF
-                            : props.COMMANDS.S2_ON
-                    );
-                }}
-                fill={props.alpha.solenoids[1] ? "green" : "red"}
+            <Solenoid
+                controlsDisabled={controlsDisabled}
+                stale={stale}
+                store={store}
+                index={1}
+                sendCommand={sendCommand}
                 stroke="#1071e5"
                 d="M954 140v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0v-10zm0-10h-10v-20h20v20z"
             />
@@ -477,16 +513,12 @@ const Plumbing = (props) => (
                 d="M930 376a6 6 0 0 1 6-6h28a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6h-28a6 6 0 0 1-6-6z"
             />
 
-            <path
-                className="solenoid"
-                onClick={() => {
-                    props.sendCommand(
-                        props.alpha.solenoids[2]
-                            ? props.COMMANDS.S3_OFF
-                            : props.COMMANDS.S3_ON
-                    );
-                }}
-                fill={props.alpha.solenoids[2] ? "green" : "red"}
+            <Solenoid
+                controlsDisabled={controlsDisabled}
+                stale={stale}
+                store={store}
+                index={2}
+                sendCommand={sendCommand}
                 stroke="#e81313"
                 d="M934 390v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0v-10zm0-10h-10v-20h20v20z"
             />
@@ -500,16 +532,12 @@ const Plumbing = (props) => (
                 fill="none"
                 d="M1136 380a6 6 0 0 0-6 6v28a6 6 0 0 0 6 6h28a6 6 0 0 0 6-6v-28a6 6 0 0 0-6-6z"
             />
-            <path
-                className="solenoid"
-                onClick={() => {
-                    props.sendCommand(
-                        props.alpha.solenoids[3]
-                            ? props.COMMANDS.S4_OFF
-                            : props.COMMANDS.S4_ON
-                    );
-                }}
-                fill={props.alpha.solenoids[3] ? "green" : "red"}
+            <Solenoid
+                controlsDisabled={controlsDisabled}
+                stale={stale}
+                store={store}
+                index={3}
+                sendCommand={sendCommand}
                 stroke="#008a0e"
                 d="M1150 384h20l-10 15zm10 15v2zm0 2-10 15h20zm0-1h-10zm-10 0v-10h-20v20h20z"
             />
@@ -527,16 +555,12 @@ const Plumbing = (props) => (
                 fill="none"
                 d="M890 56a6 6 0 0 1 6-6h28a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6h-28a6 6 0 0 1-6-6z"
             />
-            <path
-                className="solenoid"
-                onClick={() => {
-                    props.sendCommand(
-                        props.alpha.solenoids[0]
-                            ? props.COMMANDS.S1_OFF
-                            : props.COMMANDS.S1_ON
-                    );
-                }}
-                fill={props.alpha.solenoids[0] ? "green" : "red"}
+            <Solenoid
+                controlsDisabled={controlsDisabled}
+                stale={stale}
+                store={store}
+                index={0}
+                sendCommand={sendCommand}
                 stroke="#1071e5"
                 d="M894 70v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0V70zm0-10h-10V50h20v20z"
             />
@@ -1971,4 +1995,5 @@ const Plumbing = (props) => (
         </g>
     </svg>
 );
+});
 export default Plumbing;
