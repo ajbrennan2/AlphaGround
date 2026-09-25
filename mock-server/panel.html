@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AlphaGround · Telemetry Bench</title>
+<style>
+:root {
+    --darkest-blue: #000814;
+    --dark-blue: #181818;
+    --blue: #003566;
+    --dark-yellow: #ffc300;
+    --yellow: #ffd60a;
+    --line: #2b2b2b;
+    --muted: #a4abad;
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background: var(--darkest-blue);
+    color: #eee;
+    font: 13px/1.5 "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 20px 16px 60px;
+}
+h1 { font-size: 19px; margin: 0; color: var(--yellow); letter-spacing: .5px; }
+h1 small { color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px;
+    color: var(--dark-yellow); margin: 0 0 10px;
+}
+header {
+    display: flex; flex-wrap: wrap; gap: 12px 20px;
+    align-items: baseline; justify-content: space-between;
+    max-width: 1500px; margin: 0 auto 18px;
+}
+.wrap { max-width: 1500px; margin: 0 auto; }
+.status { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #d33; margin-right: 6px; }
+.dot.on { background: #2ecc71; }
+
+.panel {
+    background: var(--dark-blue); border: 1px solid var(--line);
+    border-radius: 6px; padding: 14px; margin-bottom: 14px;
+    min-width: 0; overflow-x: auto;
+}
+/* A channel table needs ~600px before amp/period start to crowd the slider. */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 600px), 1fr)); gap: 14px; align-items: start; }
+.panel h2 small { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+button {
+    font: inherit; background: #222; color: #eee; border: 1px solid var(--line);
+    border-radius: 4px; padding: 6px 11px; cursor: pointer;
+}
+button:hover { border-color: var(--dark-yellow); color: var(--yellow); }
+button.primary { background: var(--dark-yellow); color: #111; border-color: var(--dark-yellow); font-weight: 700; }
+button.primary:hover { background: var(--yellow); color: #111; }
+button.on { background: #14532d; border-color: #2ecc71; color: #9ef5bf; }
+button.off { background: #3b1111; border-color: #a33; color: #f3b1b1; }
+button.danger { border-color: #a33; color: #f3b1b1; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row + .row { margin-top: 10px; }
+
+label.field { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+select, input[type="number"] {
+    font: inherit; background: #111; color: #eee;
+    border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px;
+}
+input[type="number"] { width: 72px; }
+input.val { width: 92px; }
+input[type="range"] { accent-color: var(--dark-yellow); flex: 1; min-width: 90px; }
+
+table { width: 100%; border-collapse: collapse; min-width: 560px; }
+th {
+    text-align: left; font-weight: 400; color: var(--muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    padding: 0 6px 6px; border-bottom: 1px solid var(--line);
+}
+td { padding: 4px 6px; border-bottom: 1px solid #202020; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.name { color: var(--dark-yellow); white-space: nowrap; }
+td.live { color: var(--yellow); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.slider { width: 38%; }
+.sliderwrap { display: flex; align-items: center; gap: 8px; }
+
+.log { max-height: 220px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.log li { padding: 3px 0; border-bottom: 1px solid #202020; color: #ccc; display: flex; gap: 10px; }
+.log li span.t { color: var(--muted); }
+.log li span.n { color: var(--yellow); }
+.empty { color: var(--muted); font-style: italic; }
+.hint { color: var(--muted); margin: 6px 0 0; font-size: 12px; }
+code { color: var(--yellow); background: #111; padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+    <h1>Telemetry Bench <small>Web testing</small></h1>
+    <div class="status">
+        <span><span id="dot" class="dot"></span><span id="conn">connecting…</span></span>
+        <span id="clients">0 app clients</span>
+        <span id="fps">—</span>
+    </div>
+</header>
+
+<div class="wrap">
+    <p id="error" role="alert" style="color:#f3b1b1" hidden></p>
+    <div class="panel">
+        <h2>Scenarios</h2>
+        <div class="row" id="scenarios"></div>
+        <div class="row">
+            <button id="toggleRun" class="primary">Pause</button>
+            <label class="field">rate
+                <input type="number" id="rate" min="1" max="120" step="1" /> Hz
+            </label>
+            <label class="field">
+                <input type="checkbox" id="autoSeq" /> auto-run FIRE sequence
+            </label>
+        </div>
+        <p class="hint">Manual / fixed keeps values steady. Pause stops telemetry; Console marks readings stale after two seconds.</p>
+    </div>
+
+    <div class="panel">
+        <h2>Discrete signals</h2>
+        <div class="row">
+            <strong style="color:var(--muted)">serial</strong>
+            <button id="serialConnected" class="on">connected</button>
+            <strong style="color:var(--muted)">state</strong>
+            <select id="state"></select>
+            <strong style="color:var(--muted)">going</strong>
+            <button id="going" class="off">0</button>
+            <strong style="color:var(--muted)">key</strong>
+            <button id="keys" class="on">continuity</button>
+            <strong style="color:var(--muted)">burnwire</strong>
+            <button id="burn" class="on">continuity</button>
+        </div>
+        <div class="row">
+            <strong style="color:var(--muted)">solenoids</strong>
+            <span id="solenoids" class="row"></span>
+        </div>
+        <div class="row">
+            <strong style="color:var(--muted)">fake board event</strong>
+            <button data-cmd="8">FIRE</button>
+            <button data-cmd="10" class="danger">ABRT</button>
+            <button data-cmd="9">RST</button>
+        </div>
+
+    </div>
+
+    <div class="cols">
+        <div class="panel"><h2>Temps <small>native units · 4ch</small></h2><div id="g-temps"></div></div>
+        <div class="panel"><h2>Orientation <small>deg · yaw / pitch / roll</small></h2><div id="g-acc"></div></div>
+        <div class="panel"><h2>Thrusts <small>native units · LC-01</small></h2><div id="g-thrusts"></div></div>
+        <div class="panel">
+            <h2>Command log <small>received from the app</small></h2>
+            <ul class="log" id="log"><li class="empty">nothing yet</li></ul>
+        </div>
+        <div class="panel" style="grid-column: 1 / -1">
+            <h2>Pressures <small>native units · 12ch · outside 0–5000 displays as unknown</small></h2>
+            <div id="g-pressures"></div>
+            <p class="hint">Plumbing tint is driven by <code>pressures[0]</code> (scaled &times;300/1000) and <code>pressures[1]</code> (&divide;1000) — so [0] saturates around 3.3 and [1] around 1000.</p>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+const MODES = ["fixed", "sine", "ramp", "noise", "walk"];
+const GROUPS = {
+    temps: { el: "g-temps", min: -50, max: 600, names: i => `TC-${String(i + 1).padStart(2, "0")}` },
+    pressures: { el: "g-pressures", min: 0, max: 5000, names: i => `PT-${String(i + 1).padStart(2, "0")}` },
+    thrusts: { el: "g-thrusts", min: 0, max: 1500, names: i => `LC-${String(i + 1).padStart(2, "0")}` },
+    acc: { el: "g-acc", min: -360, max: 360, names: i => ["yaw", "pitch", "roll"][i] ?? `a${i}` },
+};
+const STATES = ["STANDBY", "FIRE_RECIEVED", "IGNITE", "BURNING", "COOLDOWN", "ABORT"];
+
+
+
+let config = null;
+let frame = null;
+let built = false;
+let ws;
+
+
+function connect() {
+    const endpoint = location.pathname.startsWith("/bench") ? "/mock/control" : "/control";
+    ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}${endpoint}`);
+    ws.onopen = () => setConn(true);
+    ws.onclose = () => { setConn(false); setTimeout(connect, 1000); };
+    ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.scenarios) renderScenarios(msg.scenarios);
+        if (msg.type === "error") { showError(msg.message); return; }
+        config = msg.config;
+        frame = msg.frame;
+        document.getElementById("clients").textContent =
+            `${msg.clients ?? 0} app client${msg.clients === 1 ? "" : "s"}`;
+        if (!built) { buildAll(); built = true; }
+        syncControls();
+        renderLive();
+        renderLog(msg.log ?? []);
+    };
+}
+
+function setConn(ok) {
+    document.getElementById("dot").classList.toggle("on", ok);
+    document.getElementById("conn").textContent = ok ? "connected" : "reconnecting…";
+}
+
+function showError(message) {
+    const target = document.getElementById("error");
+    target.textContent = message;
+    target.hidden = !message;
+}
+function send(message) {
+    if (ws?.readyState !== WebSocket.OPEN) { showError("Bench disconnected. Reconnect before editing."); return; }
+    showError("");
+    ws.send(JSON.stringify(message));
+}
+function patch(path, value) { send({ type: "patch", path, value }); }
+
+// ------------------------------------------------------------------ building
+
+function buildAll() {
+    for (const [group, meta] of Object.entries(GROUPS)) {
+        const host = document.getElementById(meta.el);
+        const table = document.createElement("table");
+        table.innerHTML =
+            "<thead><tr><th>ch</th><th>mode</th><th>value</th><th class='slider'></th><th>amp</th><th>period</th><th style='text-align:right'>live</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+
+        config.channels[group].forEach((c, i) => {
+            const tr = document.createElement("tr");
+
+            const mode = el("select", { id: `${group}-${i}-mode` });
+            MODES.forEach(m => mode.append(el("option", { value: m, textContent: m })));
+            mode.onchange = () => patch(["channels", group, i, "mode"], mode.value);
+
+            const num = el("input", { type: "number", className: "val", id: `${group}-${i}-value`, step: "any" });
+            const range = el("input", {
+                type: "range", id: `${group}-${i}-range`,
+                min: meta.min, max: meta.max, step: (meta.max - meta.min) / 1000,
+            });
+            const setValue = (v) => {
+                if (v === "" || !Number.isFinite(Number(v))) return;
+                patch(["channels", group, i, "value"], Number(v));
+            };
+            num.onchange = () => setValue(num.value);
+            range.oninput = () => { num.value = range.value; setValue(range.value); };
+
+            const amp = el("input", { type: "number", id: `${group}-${i}-amp`, step: "any", min: 0 });
+            amp.onchange = () => { if (amp.value !== "" && amp.checkValidity()) patch(["channels", group, i, "amp"], Number(amp.value)); };
+
+            const period = el("input", { type: "number", id: `${group}-${i}-period`, step: "any", min: 0.05 });
+            period.onchange = () => { if (period.value !== "" && period.checkValidity()) patch(["channels", group, i, "period"], Number(period.value)); };
+
+            for (const [control, label] of [[mode, "mode"], [num, "value"], [range, "slider"], [amp, "amplitude"], [period, "period"]]) {
+                control.setAttribute("aria-label", `${meta.names(i)} ${label}`);
+            }
+            tr.append(
+                td(meta.names(i), "name"),
+                td(mode), td(num),
+                td(wrapSlider(range), "slider"),
+                td(amp), td(period),
+                td("—", "live", `${group}-${i}-live`),
+            );
+            tbody.append(tr);
+        });
+        table.append(tbody);
+        host.replaceChildren(table);
+    }
+
+    // solenoids
+    const sol = document.getElementById("solenoids");
+    sol.replaceChildren(...[0, 1, 2, 3].map(i => {
+        const b = el("button", { id: `sol-${i}` });
+        b.onclick = () => patch(["solenoids", i], config.solenoids[i] ? 0 : 1);
+        return b;
+    }));
+
+    const state = document.getElementById("state");
+    STATES.forEach((s, i) => state.append(el("option", { value: i, textContent: `${i} ${s}` })));
+    state.onchange = () => patch(["state"], Number(state.value));
+    state.setAttribute("aria-label", "Ignition state");
+
+    bindToggle("going", () => config.going, v => patch(["going"], v), ["1", "0"]);
+    bindToggle("keys", () => config.keys[0], v => patch(["keys", 0], v), ["continuity", "open"]);
+    bindToggle("burn", () => config.burn[0], v => patch(["burn", 0], v), ["continuity", "open"]);
+
+    document.getElementById("serialConnected").onclick = () => patch(["serialConnected"], !config.serialConnected);
+    document.getElementById("rate").onchange = (e) => { if (e.target.value !== "" && e.target.checkValidity()) patch(["rate"], Number(e.target.value)); };
+    document.getElementById("autoSeq").onchange = (e) => patch(["autoSequence"], e.target.checked);
+    document.getElementById("toggleRun").onclick = () => patch(["running"], !config.running);
+
+    document.querySelectorAll("[data-cmd]").forEach(b => {
+        b.onclick = () => send({ type: "command", command: Number(b.dataset.cmd) });
+    });
+}
+
+function bindToggle(id, get, set, labels) {
+    const b = document.getElementById(id);
+    b.onclick = () => set(get() ? 0 : 1);
+    b.dataset.labels = JSON.stringify(labels);
+}
+
+function renderScenarios(list) {
+    const host = document.getElementById("scenarios");
+    if (host.childElementCount) return;
+    host.replaceChildren(...list.map(s => {
+        const b = el("button", { textContent: s.label });
+        b.onclick = () => send({ type: "scenario", id: s.id });
+        return b;
+    }));
+}
+
+// ------------------------------------------------------------------- syncing
+
+function syncControls() {
+    if (!config) return;
+    for (const group of Object.keys(GROUPS)) {
+        config.channels[group].forEach((c, i) => {
+            set(`${group}-${i}-mode`, c.mode);
+            set(`${group}-${i}-value`, c.value);
+            set(`${group}-${i}-range`, c.value);
+            set(`${group}-${i}-amp`, c.amp);
+            set(`${group}-${i}-period`, c.period);
+        });
+    }
+    config.solenoids.forEach((v, i) => {
+        const b = document.getElementById(`sol-${i}`);
+        b.textContent = `S${i + 1} ${v ? "open" : "closed"}`;
+        b.className = v ? "on" : "off";
+    });
+    for (const [id, v] of [["going", config.going], ["keys", config.keys[0]], ["burn", config.burn[0]]]) {
+        const b = document.getElementById(id);
+        const labels = JSON.parse(b.dataset.labels);
+        b.textContent = v ? labels[0] : labels[1];
+        b.className = v ? "on" : "off";
+    }
+    const serial = document.getElementById("serialConnected");
+    serial.textContent = config.serialConnected ? "connected" : "disconnected";
+    serial.className = config.serialConnected ? "on" : "off";
+    set("state", config.state);
+    set("rate", config.rate);
+    document.getElementById("autoSeq").checked = !!config.autoSequence;
+    const run = document.getElementById("toggleRun");
+    run.textContent = config.running ? "Pause" : "Resume";
+    run.className = config.running ? "primary" : "";
+}
+
+function renderLive() {
+    if (!frame) return;
+    for (const group of Object.keys(GROUPS)) {
+        (frame[group] ?? []).forEach((v, i) => {
+            const cell = document.getElementById(`${group}-${i}-live`);
+            if (cell) cell.textContent = Number(v).toFixed(2);
+        });
+    }
+    document.getElementById("fps").textContent =
+        config?.running ? `streaming @ ${config.rate} Hz` : "paused";
+}
+
+function renderLog(log) {
+    const ul = document.getElementById("log");
+    if (!log.length) { ul.replaceChildren(el("li", { className: "empty", textContent: "nothing yet" })); return; }
+    ul.replaceChildren(...log.map(e => {
+        const li = el("li");
+        li.append(
+            el("span", { className: "t", textContent: new Date(e.at).toLocaleTimeString() }),
+            el("span", { className: "n", textContent: e.name }),
+            el("span", { style: "color:var(--muted)", textContent: `#${e.command}` }),
+        );
+        return li;
+    }));
+}
+
+// ------------------------------------------------------------------- helpers
+
+function el(tag, props = {}) { return Object.assign(document.createElement(tag), props); }
+function td(content, cls = "", id = "") {
+    const c = el("td", { className: cls });
+    if (id) c.id = id;
+    if (typeof content === "string") c.textContent = content; else c.append(content);
+    return c;
+}
+function wrapSlider(range) { const d = el("div", { className: "sliderwrap" }); d.append(range); return d; }
+function set(id, v) { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; }
+
+connect();
+</script>
+</body>
+</html>

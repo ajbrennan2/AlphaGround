@@ -24,7 +24,7 @@ function OrientedRocket({ store }) {
 
 const ThreeScene = memo(function ThreeScene({ store }) {
     return (
-        <Canvas dpr={1} gl={{ antialias: false, powerPreference: "low-power", stencil: false }} frameloop="demand" style={{ width: "100%", height: "100%" }} camera={{ fov: 10 }}>
+        <Canvas resize={{ offsetSize: true }} dpr={1} gl={{ antialias: false, powerPreference: "low-power", stencil: false }} frameloop="demand" style={{ width: "100%", height: "100%" }} camera={{ fov: 10 }}>
             <Suspense fallback={null}>
                 <OrientedRocket store={store} />
             </Suspense>

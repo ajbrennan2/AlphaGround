@@ -1,8 +1,11 @@
-import { useState } from "react";
-import Datachart from "./Datachart";
+import { lazy, memo, Suspense, useState } from "react";
+import { useTelemetry } from "./useTelemetry";
 
-export default function Databox({ title, data, chartdata = [] }) {
-    const [hovered, sethovered] = useState([]);
+const Datachart = lazy(() => import("./Datachart"));
+
+const Databox = memo(function Databox({ title, store, group }) {
+    const data = useTelemetry(store, group);
+    const [hovered, sethovered] = useState(null);
 
     return (
         <div
@@ -42,29 +45,18 @@ export default function Databox({ title, data, chartdata = [] }) {
                 {data.map((item, index) => {
                     return (
                         <li
-                            onMouseEnter={() => {
-                                sethovered((prev) => {
-                                    var newd = prev;
-                                    newd[index] = 1;
-
-                                    return newd;
-                                });
-                            }}
-                            onMouseLeave={() => {
-                                sethovered((prev) => {
-                                    var newd = prev;
-                                    newd[index] = 0;
-
-                                    return newd;
-                                });
-                            }}
+                            key={index}
+                            onMouseEnter={() => sethovered(index)}
+                            onMouseLeave={() => sethovered(null)}
                             className="lihover"
                         >
                             <p style={{ margin: "2px" }}>
-                                {index}: {item ? item.toFixed(2) : "--"}
+                                {index}: {Number.isFinite(item) ? item.toFixed(2) : "--"}
                             </p>
-                            {hovered[index] ? (
-                                <Datachart data={chartdata[index]}></Datachart>
+                            {hovered === index ? (
+                                <Suspense fallback={<div style={{ height: 200 }}>Loading chart…</div>}>
+                                    <Datachart store={store} group={group} index={index} />
+                                </Suspense>
                             ) : (
                                 <></>
                             )}
@@ -74,4 +66,6 @@ export default function Databox({ title, data, chartdata = [] }) {
             </ul>
         </div>
     );
-}
+});
+
+export default Databox;

@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import chroma from "chroma-js";
 import { useTelemetry } from "./useTelemetry";
+import "./Plumbing.css";
 
 const colorscale = chroma.scale(["green", "yellow", "red"]);
 
@@ -13,26 +14,93 @@ function PressureCloud({ store, index, multiplier, stale, ...pathProps }) {
     return <path {...pathProps} fill={fill} />;
 }
 
-function Solenoid({ store, index, sendCommand, controlsDisabled, stale, ...pathProps }) {
+function Solenoid({ store, index, sendCommand, toggleSolenoid, request, controlsDisabled, stale, ...pathProps }) {
     const solenoids = useTelemetry(store, "solenoids");
     const value = solenoids[index];
     const unknown = stale || value === null;
-    const disabled = controlsDisabled || unknown;
+    const disabled = controlsDisabled;
     const toggle = () => {
         const current = store.getLatest().solenoids[index];
-        if (!disabled && (current === 0 || current === 1)) sendCommand(index * 2 + (current ? 1 : 0));
+        if (disabled) return;
+        if (toggleSolenoid) toggleSolenoid(index);
+        else sendCommand(index * 2 + (current ? 1 : 0));
     };
     return <path {...pathProps} className="solenoid" role="button" tabIndex={disabled ? -1 : 0}
-        aria-label={`Solenoid ${index + 1}: ${unknown ? 'unknown' : value ? 'open' : 'closed'}`}
+        aria-label={`Solenoid ${index + 1}: ${unknown ? 'unknown' : value ? 'open' : 'closed'}${request ? ', waiting for response' : ''}`}
         aria-disabled={disabled} aria-pressed={value === 1 && !unknown}
         onClick={toggle} onKeyDown={event => {
             if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
-        }} fill={unknown ? "#87939d" : value ? "green" : "red"} />;
+        }} fill={request ? "#ebce6a" : unknown ? "#87939d" : value ? "green" : "red"} />;
 }
 
+
+const symbols = [
+    { label: ['Gas cylinder'], path: 'M-5 0V12H5V0C5-5-5-5-5 0ZM-1.5-8V-4H1.5V-8Z' },
+    { label: ['Ethanol tank'], path: 'M-6-10C-6-13 6-13 6-10V10C6 13-6 13-6 10ZM-6-10H6M-6 10H6' },
+    { label: ['Pressure', 'regulator'], path: 'M-10-5V7L0 1ZM10-5V7L0 1M0 1V-7M-5-7C-5-11 5-11 5-7Z' },
+    { label: ['Check valve'], path: 'M-10 6V-6L10 6V-6M-7-11H7L4-14M7-11L4-8' },
+    { label: ['Manual', 'ball valve'], path: 'M-10-6V6L0 0ZM10-6V6L0 0M5 0A5 5 0 1 0-10 0A5 5 0 1 0 5 0' },
+    { label: ['Powered valve'], path: 'M-10 0V12L0 6ZM10 0V12L0 6M0 6V-5M-6-5V-17H6V-5Z' },
+    { label: ['Pressure relief', 'valve'], path: 'M-10-6V6L0 0ZM0 0-6 10H6ZM-7-12 7-14-7-16' },
+    { label: ['Pressure gauge'], code: 'PG' },
+    { label: ['Pressure', 'transducer'], code: 'PT' },
+];
+
+const SchematicKeys = memo(function SchematicKeys() {
+    return <>
+        <g className="schematic-key" transform="translate(510 0)" role="group" aria-label="Commodity color key">
+            <rect className="schematic-key-panel" width="180" height="176" rx="8" />
+            <text className="schematic-key-title" x="16" y="28">Commodity color key</text>
+            <path className="schematic-key-divider" d="M16 42H164" />
+            {[['GOX', '#008a0e'], ['GN2 feed', '#1071e5'], ['Ethanol', '#e81313']].map(([label, color], index) =>
+                <g key={label} transform={`translate(16 ${68 + index * 36})`}>
+                    <path d="M0 0H26" stroke={color} strokeWidth="4" strokeLinecap="round" />
+                    <text x="40" y="4">{label}</text>
+                </g>
+            )}
+        </g>
+        <g className="schematic-key" transform="translate(1380 -10)" role="group" aria-label="Schematic symbol key">
+            <rect className="schematic-key-panel" width="164.5" height="507" rx="8" />
+            <text className="schematic-key-title" x="16" y="28">Symbol key</text>
+            <path className="schematic-key-divider" d="M16 42H148.5" />
+            {symbols.map(({ label, path, code }, index) =>
+                <g key={label.join(' ')} transform={`translate(0 ${68 + index * 49})`}>
+                    <g className="schematic-key-symbol" transform="translate(30 0)">
+                        {path ? <path d={path} /> : <><circle r="12" /><text className="schematic-key-code" y="3">{code}</text></>}
+                    </g>
+                    <text x="54" y={label.length === 1 ? 4 : -4}>
+                        {label.map((line, lineIndex) => <tspan key={line} x="54" dy={lineIndex ? 17 : 0}>{line}</tspan>)}
+                    </text>
+                </g>
+            )}
+        </g>
+    </>;
+});
+
 // The large static drawing renders once. Only six small paths subscribe to data.
-const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled = false, stale = false }) {
+const Plumbing = memo(function Plumbing({ store, sendCommand, toggleSolenoid, requests = {}, controlsDisabled = false, stale = false, attitude }) {
+    const layoutRef = useRef(null);
+    const attitudeAnchorRef = useRef(null);
+    const [attitudeBounds, setAttitudeBounds] = useState(null);
+    const hasAttitude = Boolean(attitude);
+
+    useLayoutEffect(() => {
+        if (!hasAttitude) return;
+        const layout = layoutRef.current;
+        const updateBounds = () => {
+            const bounds = layout.getBoundingClientRect();
+            const anchor = attitudeAnchorRef.current.getBoundingClientRect();
+            setAttitudeBounds({ left: anchor.left - bounds.left, top: anchor.top - bounds.top, width: anchor.width, height: anchor.height });
+        };
+        updateBounds();
+        const observer = new ResizeObserver(updateBounds);
+        observer.observe(layout);
+        observer.observe(layout.querySelector('svg'));
+        return () => observer.disconnect();
+    }, [hasAttitude]);
+
     return (
+    <div ref={layoutRef} className="plumbing-layout">
     <svg
         xmlns="http://www.w3.org/2000/svg"
         xmlns:lucid="lucid"
@@ -499,6 +567,8 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
                 stale={stale}
                 store={store}
                 index={1}
+                toggleSolenoid={toggleSolenoid}
+                request={requests[1]}
                 sendCommand={sendCommand}
                 stroke="#1071e5"
                 d="M954 140v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0v-10zm0-10h-10v-20h20v20z"
@@ -518,6 +588,8 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
                 stale={stale}
                 store={store}
                 index={2}
+                toggleSolenoid={toggleSolenoid}
+                request={requests[2]}
                 sendCommand={sendCommand}
                 stroke="#e81313"
                 d="M934 390v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0v-10zm0-10h-10v-20h20v20z"
@@ -537,6 +609,8 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
                 stale={stale}
                 store={store}
                 index={3}
+                toggleSolenoid={toggleSolenoid}
+                request={requests[3]}
                 sendCommand={sendCommand}
                 stroke="#008a0e"
                 d="M1150 384h20l-10 15zm10 15v2zm0 2-10 15h20zm0-1h-10zm-10 0v-10h-20v20h20z"
@@ -560,6 +634,8 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
                 stale={stale}
                 store={store}
                 index={0}
+                toggleSolenoid={toggleSolenoid}
+                request={requests[0]}
                 sendCommand={sendCommand}
                 stroke="#1071e5"
                 d="M894 70v20l15-10zm15 10h2zm2 0 15-10v20zm-1 0V70zm0-10h-10V50h20v20z"
@@ -569,133 +645,8 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
                 d="M900 56a6 6 0 0 1 6-6h8a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6z"
             />
             <use xlinkHref="#x" transform="translate(904 64.4)" />
-            <path
-                fill="var(--blue)"
-                stroke="#dfe3e8"
-                strokeWidth={2}
-                d="M1380 2a12 12 0 0 1 12-12h140.5a12 12 0 0 1 12 12v483.28a12 12 0 0 1-12 12H1392a12 12 0 0 1-12-12z"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                strokeWidth={1.05}
-                d="M1419 56.5V68h10V56.5c0-1.93-2.24-3.5-5-3.5s-5 1.57-5 3.5zm3.5-7V53h3v-3.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#e81313"
-                strokeWidth={1.05}
-                d="M1419 91.66v15.2c.28 2.66 9.35 2.66 9.63 0v-15.2c-.28-2.06-9.35-2.06-9.63 0zm0 0h9.8m-9.8 15.2h9.8"
-            />
-            <path
-                fill="none"
-                d="M1414 135.88c0-1.66 1.34-3 3-3h14c1.66 0 3 1.34 3 3v14c0 1.66-1.34 3-3 3h-14c-1.66 0-3-1.34-3-3z"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                d="M1416 137.88v10l7-5zm7 5h2zm2 0 7-5v10zm-1 0v-6m-4 0c0-1.1 1.8-2 4-2s4 .9 4 2z"
-            />
-            <path
-                fill="none"
-                d="M1414 184.16c0-1.66 1.34-3 3-3h14c1.66 0 3 1.34 3 3v4c0 1.66-1.34 3-3 3h-14c-1.66 0-3-1.34-3-3z"
-            />
-            <path fill="none" stroke="#008a0e" d="M1416 191.16v-10l16 10v-10" />
-            <path
-                fill="#008a0e"
-                stroke="#008a0e"
-                d="M1417 181.16c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm2-2h10zm10 0-1-1v2z"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                d="M1428 229.44c0 2.2-1.8 4-4 4s-4-1.8-4-4 1.8-4 4-4 4 1.8 4 4"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                d="M1416 224.44v10l7-5zm7 5h2zm2 0 7-5v10z"
-            />
-            <path
-                fill="none"
-                d="M1414 265.72c0-1.66 1.34-3 3-3h14c1.66 0 3 1.34 3 3v14c0 1.66-1.34 3-3 3h-14c-1.66 0-3-1.34-3-3z"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                d="M1416 272.72v10l7-5zm7 5h2zm2 0 7-5v10zm-1 0v-5zm0-5h-5v-10h10v10zm-8 38.28v10l8-5zm8 5-5 8h10z"
-            />
-            <path
-                fill="#008a0e"
-                stroke="#008a0e"
-                d="M1426 316c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#008a0e"
-                strokeWidth={1.05}
-                d="M1434 377.76c0-5.52-4.48-10-10-10s-10 4.48-10 10 4.48 10 10 10 10-4.48 10-10z"
-            />
-            <path
-                fill="var(--blue)"
-                stroke="#1071e5"
-                strokeWidth={1.05}
-                d="M1434 439.52c0-5.52-4.48-10-10-10s-10 4.48-10 10 4.48 10 10 10 10-4.48 10-10z"
-            />
-            <use xlinkHref="#A" transform="translate(1412 28.667)" />
-            <use xlinkHref="#B" transform="translate(1448 56.867)" />
-            <use xlinkHref="#C" transform="translate(1448 74.467)" />
-            <use xlinkHref="#D" transform="translate(1448 99.16)" />
-            <use xlinkHref="#E" transform="translate(1448 117.64)" />
-            <use xlinkHref="#F" transform="translate(1448 142.44)" />
-            <use xlinkHref="#G" transform="translate(1448 160.92)" />
-            <use xlinkHref="#H" transform="translate(1448 185.72)" />
-            <use xlinkHref="#I" transform="translate(1448 204.2)" />
-            <use xlinkHref="#J" transform="translate(1448 229)" />
-            <use xlinkHref="#K" transform="translate(1448 247.48)" />
-            <use xlinkHref="#I" transform="translate(1475.144 247.48)" />
-            <use xlinkHref="#L" transform="translate(1448 272.28)" />
-            <use xlinkHref="#I" transform="translate(1448 290.76)" />
-            <use xlinkHref="#F" transform="translate(1448 315.32)" />
-            <use xlinkHref="#M" transform="translate(1448 333.8)" />
-            <use xlinkHref="#I" transform="translate(1448 352.28)" />
-            <use xlinkHref="#N" transform="translate(1448 377.08)" />
-            <use xlinkHref="#O" transform="translate(1448 395.56)" />
-            <use xlinkHref="#P" transform="translate(1448 414.04)" />
-            <use xlinkHref="#Q" transform="translate(1448 438.84)" />
-            <use xlinkHref="#O" transform="translate(1448 457.32)" />
-            <use xlinkHref="#R" transform="translate(1448 475.8)" />
-            <path
-                fill="var(--blue)"
-                stroke="#dfe3e8"
-                strokeWidth={2}
-                d="M510 12a12 12 0 0 1 12-12h156a12 12 0 0 1 12 12v157.28a12 12 0 0 1-12 12H522a12 12 0 0 1-12-12z"
-            />
-            <path
-                fill="#008a0e"
-                stroke="#000"
-                strokeOpacity={0.25}
-                d="M542.36 79.9v-.13a12.13 12.13 0 0 1 12.13-12.13 12.13 12.13 0 0 1 12.13 12.13A12.13 12.13 0 0 1 554.5 91.9a12.13 12.13 0 0 1-12.14-12.13v-.12"
-            />
-            <path
-                fill="#1071e5"
-                stroke="#000"
-                strokeOpacity={0.25}
-                d="M542.36 112.25v-.12A12.13 12.13 0 0 1 554.5 100a12.13 12.13 0 0 1 12.13 12.13 12.13 12.13 0 0 1-12.14 12.13 12.13 12.13 0 0 1-12.14-12.13V112"
-            />
-            <path
-                fill="#e81313"
-                stroke="#000"
-                strokeOpacity={0.25}
-                d="M542.36 144.6v-.1a12.13 12.13 0 0 1 12.13-12.15 12.13 12.13 0 0 1 12.13 12.14 12.13 12.13 0 0 1-12.14 12.12 12.13 12.13 0 0 1-12.14-12.13v-.14"
-            />
-            <use xlinkHref="#S" transform="translate(542.357 35.828)" />
-            <use xlinkHref="#T" transform="translate(542.357 54.308)" />
-            <use xlinkHref="#U" transform="translate(582.685 54.308)" />
-            <use xlinkHref="#n" transform="translate(578.759 82.804)" />
-            <use xlinkHref="#V" transform="translate(578.759 115.294)" />
-            <use xlinkHref="#W" transform="translate(611.386 115.294)" />
-            <use xlinkHref="#X" transform="translate(578.759 147.651)" />
+            <SchematicKeys />
+            {hasAttitude && <rect ref={attitudeAnchorRef} x="510" y="202" width="180" height="280" fill="none" pointerEvents="none" aria-hidden="true" />}
             <path
                 fill="none"
                 stroke="#1071e5"
@@ -1994,6 +1945,9 @@ const Plumbing = memo(function Plumbing({ store, sendCommand, controlsDisabled =
             </defs>
         </g>
     </svg>
+    {/* Keep WebGL outside foreignObject: Safari misplaces composited canvases inside SVG transforms. */}
+    {hasAttitude && attitudeBounds && <div className="schematic-attitude" style={attitudeBounds}>{attitude}</div>}
+    </div>
 );
 });
 export default Plumbing;

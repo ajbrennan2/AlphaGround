@@ -26,3 +26,8 @@ dist-ssr
 dist
 release
 
+
+# Python backend
+__pycache__/
+*.py[cod]
+.venv/

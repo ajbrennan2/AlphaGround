@@ -1,0 +1,5 @@
+fastapi
+anyio
+uvicorn[standard]
+pyserial
+# xplink is provided by the board/firmware project, not installed from PyPI.

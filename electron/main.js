@@ -8,8 +8,8 @@ const __dirname = path.dirname(__filename);
 
 function createWindow() {
     const mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
+        width: 1366,
+        height: 900,
         title: "AlphaGround",
         webPreferences: {
             nodeIntegration: false, // Best practice for security
@@ -18,11 +18,13 @@ function createWindow() {
         },
     });
 
+    mainWindow.maximize();
+
     // 1. Check if the app is packaged (Production) or in Development
     if (!app.isPackaged && process.env.VITE_DEV_SERVER_URL) {
         // --- DEVELOPMENT ---
         mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-        mainWindow.webContents.openDevTools();
+
     } else {
         // --- PRODUCTION ---
         // Logic: __dirname points to 'app.asar/electron'

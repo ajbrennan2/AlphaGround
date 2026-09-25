@@ -26,4 +26,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Electron, the mock telemetry bench, and tooling run on Node.
+    files: ['electron/**/*.js', 'mock-server/**/*.js', 'tests/**/*.js', 'vite.config.js'],
+    languageOptions: { globals: globals.node },
+  },
 ])

@@ -55,6 +55,7 @@ export function createTelemetryStore() {
         going: null,
         serial_connected: null,
     };
+    let frameId = 0;
     let published = latest;
     const listeners = new Map();
     const histories = new Map();
@@ -103,6 +104,20 @@ export function createTelemetryStore() {
 
     return {
         subscribe,
+        reset() {
+            latest = {
+                ...Object.fromEntries(Object.entries(GROUP_COUNTS).map(([key, count]) => [key, Array(count).fill(null)])),
+                state: null, going: null, serial_connected: null, frameId: ++frameId,
+            };
+            published = latest;
+            for (const history of histories.values()) {
+                history.buffer = new HistoryBuffer();
+                history.snapshot = null;
+                history.version = 0;
+                history.lastPublishedAt = -Infinity;
+            }
+            for (const key of listeners.keys()) notify(key);
+        },
         getLatest: () => latest,
         getSnapshot: key => published[key],
         getHistory,
@@ -117,7 +132,6 @@ export function createTelemetryStore() {
             for (const group of Object.keys(GROUP_COUNTS)) {
                 const values = frame[group].map(value => {
                     if (!Number.isFinite(value)) return null;
-                    if (group === "pressures" && (value < 0 || value > 5000)) return null;
                     if (["solenoids", "keys", "burn"].includes(group) && value !== 0 && value !== 1) return null;
                     return value;
                 });
@@ -126,10 +140,11 @@ export function createTelemetryStore() {
             next.state = Number.isInteger(frame.state) && frame.state >= 0 && frame.state <= 5 ? frame.state : null;
             next.going = frame.going === 0 || frame.going === 1 ? frame.going : null;
             next.serial_connected = typeof frame.serial_connected === "boolean" ? frame.serial_connected : null;
+            next.frameId = ++frameId;
             const time = Number.isFinite(frame.time) ? frame.time : receivedAt;
             for (const [group, count] of Object.entries(CHANNEL_COUNTS)) {
                 for (let index = 0; index < count; index++) {
-                    histories.get(`${group}.${index}`).buffer.push(next[group][index], time);
+                    histories.get(`${group}.${index}`).buffer.push(next.serial_connected === false ? null : next[group][index], time);
                 }
             }
             latest = next;
