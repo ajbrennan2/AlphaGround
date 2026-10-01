@@ -17,22 +17,26 @@ export function Status({ children, tone = 'good' }) {
     return <span className={`dp-status ${tone}`}><i />{children}</span>;
 }
 
-const IgnitionStatus = memo(function IgnitionStatus({ store, available }) {
+export const IgnitionStatus = memo(function IgnitionStatus({ store, available }) {
     const state = useTelemetry(store, 'state');
     const going = useTelemetry(store, 'going');
     const stage = STAGES[state];
     const label = !available || state === null ? 'Unknown' : state === 5 ? 'Aborted' : stage.label;
     return <div className={`console-mission-state ${!available ? 'unavailable' : state === 5 ? 'aborted' : ''}`}>
         <div className="console-ignition-status" aria-label="Ignition status"><span>Ignition sequence</span><strong role="status">{label}</strong><span className="console-going" title="Board sequence flag"><i />{!available || going === null ? 'Sequence unknown' : going ? 'Sequence active' : 'Sequence inactive'}</span></div>
-        <ol className="console-phase-track" aria-label="Ignition phases">{STAGES.map((stage, index) => <li key={stage.label} className={available && state === index ? 'current' : ''} aria-current={available && state === index ? 'step' : undefined}><span />{stage.label}</li>)}</ol>
+        <ol className="console-phase-track" aria-label="Ignition phases">{STAGES.map((stage, index) => <li key={stage.label} title={stage.label} className={available && state === index ? 'current' : ''} aria-current={available && state === index ? 'step' : undefined}><span className="console-phase-bar" /><span className="console-phase-label">{stage.label}</span></li>)}</ol>
     </div>;
 });
 
 export function ConsoleHeader({ store, available, connectionStatus, connectionControls }) {
     return <header className="console-header">
         <IgnitionStatus store={store} available={available} />
-        <div className="console-link-panel"><div className="console-control-connection" role="status"><Status tone={available ? 'good' : 'warning'}>{connectionStatus}</Status>{!available && <span className="console-stale-label">Stale / unavailable</span>}</div><ConnectionMenu {...connectionControls} /></div>
+        <ConnectionPanel available={available} connectionStatus={connectionStatus} connectionControls={connectionControls} />
     </header>;
+}
+
+export function ConnectionPanel({ available, connectionStatus, connectionControls }) {
+    return <div className="console-link-panel"><div className="console-control-connection" role="status"><Status tone={available ? 'good' : 'warning'}>{connectionStatus}</Status>{!available && <span className="console-stale-label">Stale / unavailable</span>}</div><ConnectionMenu {...connectionControls} /></div>;
 }
 
 export const SensorGroup = memo(function SensorGroup({ store, group, selected, onSelect, stale }) {
@@ -67,7 +71,7 @@ function IgnitionActions({ available, transportAvailable, state, sendCommand }) 
 
 }
 
-export const Controls = memo(function Controls({ store, available, transportAvailable, locked, setLocked, sendCommand, toggleSolenoid, requests = {} }) {
+export const Controls = memo(function Controls({ store, available, transportAvailable, locked, setLocked, sendCommand, toggleSolenoid, requests = {}, graphical = false }) {
     const state = useTelemetry(store, 'state');
     const keys = useTelemetry(store, 'keys');
     const burn = useTelemetry(store, 'burn');
@@ -80,8 +84,7 @@ export const Controls = memo(function Controls({ store, available, transportAvai
         if (phrase.trim().toLowerCase() !== 'unlock') { setError('Type UNLOCK to enable solenoid commands.'); return; }
         setLocked(false); setUnlocking(false); setPhrase(''); setError('');
     }
-    return <section className="dp-panel dp-controls" aria-label="Ignition controls">
-        <div className="console-valve-controls">
+    const valves = <div key="valves" className="console-valve-controls">
             <div className="dp-lock-row"><span><ControlIcon name="lock" />Solenoids <strong>{locked ? 'Locked' : 'Unlocked'}</strong></span><button onClick={() => { if (!locked) setLocked(true); else setUnlocking(!unlocking); }}>{locked ? unlocking ? 'Cancel' : 'Unlock' : 'Lock'}</button></div>
             {unlocking && <form className="console-unlock" onSubmit={unlock}><label htmlFor="unlock-phrase">Type UNLOCK to enable</label><div><input id="unlock-phrase" value={phrase} onChange={event => setPhrase(event.target.value)} autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? 'unlock-error' : undefined} /><button type="submit">Unlock</button></div>{error && <p id="unlock-error" role="alert">{error}</p>}</form>}
             <div className="dp-solenoids">{solenoids.map((value, index) => {
@@ -91,11 +94,11 @@ export const Controls = memo(function Controls({ store, available, transportAvai
             })}</div>
             {Object.keys(requests).length > 0 && <p className="console-valve-pending" role="status">{!available ? 'Disconnected · waiting for response.' : Object.values(requests).some(request => !request.sent) ? 'Not sent · select a valve to send a new request.' : 'Waiting for response from board.'} {!available && 'Not queued.'}</p>}
 
-        </div>
-        <div className="console-readiness"><PanelHeader title="Continuity" /><div className="dp-checks"><Continuity label="Key" icon="key" value={keys[0]} stale={!available} /><Continuity label="Burnwire" icon="circuit" value={burn[0]} stale={!available} /></div></div>
-        <IgnitionActions key={`${available}:${state}`} available={available} transportAvailable={transportAvailable} state={state} sendCommand={sendCommand} />
+        </div>;
+    const continuity = <div key="continuity" className="console-readiness"><PanelHeader title="Continuity" /><div className="dp-checks"><Continuity label="Key" icon="key" value={keys[0]} stale={!available} /><Continuity label="Burnwire" icon="circuit" value={burn[0]} stale={!available} /></div></div>;
+    const ignition = <IgnitionActions key={`${available}:${state}`} available={available} transportAvailable={transportAvailable} state={state} sendCommand={sendCommand} />;
 
-    </section>;
+    return <section className="dp-panel dp-controls" aria-label="Ignition controls">{graphical ? [ignition, continuity, valves] : [valves, continuity, ignition]}</section>;
 });
 
 function SelectedHistory({ store, selected, stale, windowSeconds }) {
@@ -108,7 +111,7 @@ function SelectedHistory({ store, selected, stale, windowSeconds }) {
         {(stale || missing > 0) && <p className="dp-footnote">{stale ? 'Stale readings. ' : ''}{missing > 0 && 'Gaps: missing or invalid telemetry.'}</p>}</>;
 }
 
-export function SensorHistory({ store, selected, stale, historyRef, onClose, mode, onModeChange, events }) {
+export function SensorHistory({ store, selected, stale, historyRef, onClose, mode, onModeChange, events, onGraphicalView }) {
     const [windowSeconds, setWindowSeconds] = useState(5);
     function navigateTabs(event) {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -131,6 +134,7 @@ export function SensorHistory({ store, selected, stale, historyRef, onClose, mod
             {events.length ? <ol>{events.map((event, index) => <li key={`${event.time}-${index}`}><time>{event.time}</time><span>{event.message}</span></li>)}</ol> : <div className="console-history-empty">No commands sent.</div>}
             {import.meta.env.MODE === 'web-test' && <a className="console-bench-link" href="/bench/" target="_blank" rel="noopener noreferrer">Parameters ↗</a>}
         </div>
+        <div className="console-history-footer"><button className="console-graphical-button" onClick={onGraphicalView}>View all graphs<span aria-hidden="true">↗</span></button></div>
         <p className="console-sr-only" role="status">{events[0]?.message ?? 'No commands sent.'}</p>
     </section>;
 }

@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plumbing from './Plumbing';
+import GraphicalTelemetry from './console/GraphicalTelemetry';
 import { createTelemetryStore } from './telemetry';
 import { useTelemetry } from './useTelemetry';
 import { useTelemetryConnection } from './useTelemetryConnection';
-import { Attitude, ConsoleHeader, Controls, PanelHeader, SensorGroup, SensorHistory } from './console/ConsolePanels';
+import { Attitude, ConnectionPanel, ConsoleHeader, Controls, IgnitionStatus, PanelHeader, SensorGroup, SensorHistory } from './console/ConsolePanels';
 import { commandBlockReason, shortcutSolenoid, solenoidCommand } from './console/commandPolicy';
 import { GROUPS } from './console/presentation';
 import { resolveValveRequests, waitingValveRequests, VALVE_RESPONSE_DELAY_MS } from './console/valveRequests';
 import './App.css';
 
-function ConsoleSession({ store, send, connection, fresh, serialConnected, available, transportAvailable, selected, setSelected, events, setEvents, connectionControls }) {
+function ConsoleSession({ graphical, setGraphical, store, send, connection, fresh, serialConnected, available, transportAvailable, selected, setSelected, events, setEvents, connectionControls }) {
     const [lockState, setLockState] = useState({ available, locked: true });
     // Reset only command access on link changes; keep the chart and WebGL canvas mounted.
     if (lockState.available !== available) setLockState({ available, locked: true });
@@ -83,18 +84,22 @@ function ConsoleSession({ store, send, connection, fresh, serialConnected, avail
     const changeLock = useCallback(next => { setLockState({ available, locked: next }); report(`Solenoid commands ${next ? 'locked' : 'unlocked'}`); }, [available, report]);
     const status = connection !== 'Connected' ? connection : serialConnected === false ? 'Serial disconnected' : !fresh ? 'Waiting for telemetry' : 'Telemetry connected';
 
-    return <div className="dp-root dp-console console-app"><main className="dp-station">
-        <ConsoleHeader store={store} available={available} connectionStatus={status} connectionControls={connectionControls} />
+    const header = <ConsoleHeader store={store} available={available} connectionStatus={status} connectionControls={connectionControls} />;
+
+    return <div className={`dp-root dp-console console-app${graphical ? ' console-graphical' : ''}`}><main className="dp-station">
+        {!graphical && header}
         <div className="dp-workspace">
+            {graphical && <header className="console-header"><IgnitionStatus store={store} available={available} /></header>}
+            <Controls key={available ? 'available' : 'unavailable'} graphical={graphical} store={store} available={available} transportAvailable={transportAvailable} locked={locked} setLocked={changeLock} sendCommand={sendCommand} toggleSolenoid={toggleSolenoid} requests={waitingRequests} />
+            {graphical && <ConnectionPanel available={available} connectionStatus={status} connectionControls={connectionControls} />}
             <section id="flow-diagram" className="dp-panel dp-diagram" aria-label="Flow diagram">
-                <div className="console-schematic-heading"><div className="console-schematic-title"><strong>ALPHA<span> / Ground control</span></strong><h1>Propulsion schematic</h1></div></div>
-                <div className="console-flow-scroll dp-original-flow"><Plumbing attitude={<Attitude store={store} stale={!available} />} store={store} sendCommand={sendCommand} toggleSolenoid={toggleSolenoid} requests={waitingRequests} controlsDisabled={locked} stale={!available} /></div>
+                <div className="console-schematic-heading">{graphical ? <button className="console-graphical-button" onClick={() => setGraphical(false)}>Default view <span aria-hidden="true">↗</span></button> : <div className="console-schematic-title"><strong>ALPHA<span> / Ground control</span></strong><h1>Propulsion schematic</h1></div>}</div>
+                <div className="console-flow-scroll dp-original-flow"><Plumbing attitude={!graphical && <Attitude store={store} stale={!available} />} store={store} sendCommand={sendCommand} toggleSolenoid={toggleSolenoid} requests={waitingRequests} controlsDisabled={locked} stale={!available} /></div>
             </section>
-            <Controls key={available ? 'available' : 'unavailable'} store={store} available={available} transportAvailable={transportAvailable} locked={locked} setLocked={changeLock} sendCommand={sendCommand} toggleSolenoid={toggleSolenoid} requests={waitingRequests} />
-            <aside className="console-data-rail" aria-label="Sensor telemetry">
+            {graphical ? <GraphicalTelemetry store={store} stale={!available} events={events} /> : <aside className="console-data-rail" aria-label="Sensor telemetry">
                 <section id="all-sensors" className="dp-panel dp-channels" aria-label="All sensor readings"><PanelHeader title="Live telemetry" detail={available ? '20 channels' : '20 channels · stale'} /><div className="dp-channel-groups">{Object.keys(GROUPS).map(group => <SensorGroup key={group} store={store} group={group} selected={selected} onSelect={selectSensor} stale={!available} />)}</div></section>
-                <SensorHistory store={store} selected={selected} stale={!available} historyRef={historyRef} onClose={() => setSelected(null)} mode={historyMode} onModeChange={setHistoryMode} events={events} />
-            </aside>
+                <SensorHistory store={store} selected={selected} stale={!available} historyRef={historyRef} onClose={() => setSelected(null)} mode={historyMode} onModeChange={setHistoryMode} events={events} onGraphicalView={() => setGraphical(true)} />
+            </aside>}
         </div>
     </main></div>;
 
@@ -102,6 +107,14 @@ function ConsoleSession({ store, send, connection, fresh, serialConnected, avail
 
 export default function App() {
     const [store] = useState(createTelemetryStore);
+    const [graphical, setGraphical] = useState(() => {
+        try { return localStorage.getItem('alpha-ground-interface') === 'graphical'; }
+        catch { return false; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('alpha-ground-interface', graphical ? 'graphical' : 'basic'); }
+        catch { /* The view remains usable when storage is unavailable. */ }
+    }, [graphical]);
     const [selected, setSelected] = useState(null);
     const [events, setEvents] = useState([]);
     const connectionControls = useTelemetryConnection(store);
@@ -111,5 +124,5 @@ export default function App() {
     const available = transportAvailable && fresh;
     // A loss of usable telemetry resets local command locks and ignition enable.
     // Acquisition buffers remain in the parent store; no commands are replayed.
-    return <ConsoleSession key={sessionId} connectionControls={connectionControls} selected={selected} setSelected={setSelected} events={events} setEvents={setEvents} store={store} send={send} connection={connection} fresh={fresh} serialConnected={serialConnected} available={available} transportAvailable={transportAvailable} />;
+    return <ConsoleSession graphical={graphical} setGraphical={setGraphical} key={sessionId} connectionControls={connectionControls} selected={selected} setSelected={setSelected} events={events} setEvents={setEvents} store={store} send={send} connection={connection} fresh={fresh} serialConnected={serialConnected} available={available} transportAvailable={transportAvailable} />;
 }

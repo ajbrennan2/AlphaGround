@@ -199,7 +199,21 @@ history is selected.
 
 ## Console interface
 
-The main `/` route and Electron app use the Console design. The original plumbing
+The main `/` route and Electron app offer **Basic** and **Graphical** views using
+the **Graphical view** button at the bottom of the History box. **Expand** on the
+schematic returns to Basic. Basic is the default; the choice is saved
+locally and restored on the next launch. Switching views preserves the connection,
+retained telemetry, command locks, pending valve requests, and activity.
+
+Graphical uses the chart layout with all 20 live sensor histories, grouped by
+pressure, temperature, thrust, and orientation. It includes a shared 3s / 5s / 10s
+window, an optional one-second average, and **Pause charts** (acquisition and
+command controls continue). **Resume charts** returns to the latest samples.
+The existing command controls remain available beside the charts; **Expand** on
+the schematic returns to Basic. Missing/invalid samples remain gaps, and stale
+telemetry is labeled. The arcade UI and standalone chart mockup have been removed.
+
+Basic uses the Console design. The original plumbing
 SVG is the focal point, including all original path geometry, legends, gauges,
 manual valves, regulators, and live pressure/solenoid updates. The schematic occupies the main canvas, with all 20 readings and sensor history
 in a right-hand rail. Ignition state and phase progression sit across the top,
@@ -261,7 +275,7 @@ sensors are shown together below the diagram; selecting a reading focuses its
 history. The scenario selector includes each ignition phase, abort, and loss of
 connection. These routes load independently of the live app:
 they use local synthetic data and never open a telemetry WebSocket or send
-hardware commands. The ordinary `/` route opens the live Console interface.
+hardware commands. The ordinary `/` route opens the live app in the saved Basic or Graphical view.
 
 These are design explorations, not operational replacements. The previews now
 reuse the original plumbing SVG, history is generated sample data, and pressure,

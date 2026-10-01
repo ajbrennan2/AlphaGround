@@ -1,7 +1,8 @@
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 // Design previews are isolated from the board connection and live controls.
-const App = lazy(() => new URLSearchParams(window.location.search).has("design")
+const design = new URLSearchParams(window.location.search).get("design");
+const App = lazy(() => ['console', 'field', 'analysis'].includes(design)
     ? import("./designs/DesignPreview.jsx")
     : import("./App.jsx"));
 

@@ -126,6 +126,11 @@ function handleCommand(command) {
 
 const server = http.createServer((req, res) => {
     const url = (req.url ?? "/").split("?")[0];
+    if (url === "/favicon.png") {
+        res.writeHead(200, { "content-type": "image/png" });
+        fs.createReadStream(path.join(__dirname, "../public/favicon.png")).pipe(res);
+        return;
+    }
     if (url === "/favicon.ico") {
         res.writeHead(204).end();
         return;

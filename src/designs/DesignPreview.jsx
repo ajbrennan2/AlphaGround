@@ -150,6 +150,6 @@ export default function DesignPreview() {
             <div className="dp-workspace">{diagram}{controls}{channels}{trends}{attitude}{activity}</div>
             <footer className="dp-station-footer"><span><i/>Design preview · synthetic data</span><span>* Native units retained; pressure, temperature & thrust units need verification.</span></footer>
         </main>
-        <div className="dp-design-note"><strong>{concept.name}</strong><span>{design === 'console' ? 'Best all-round direction. Familiar layout, calmer hierarchy.' : design === 'field' ? 'Best for outdoor test days. More contrast and larger touch targets.' : 'For troubleshooting. Flow first, with a second reference plot below.'}</span><span>Alpha Ground / Interface explorations</span></div>
+        <div className="dp-design-note"><strong>{concept.name}</strong><span>{design === 'console' ? 'Best all-round direction. Familiar layout, calmer hierarchy.' : design === 'field' ? 'Best for outdoor test days. More contrast and larger touch targets.' : 'For troubleshooting. Flow first, with a second reference plot below.'}</span><a href="./" style={{ color: 'var(--accent)' }}>Live Basic / Graphical interface ↗</a><span>Alpha Ground / Interface explorations</span></div>
     </div>;
 }

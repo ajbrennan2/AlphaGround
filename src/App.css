@@ -26,9 +26,9 @@
 .console-mission-state.aborted .console-ignition-status > strong { color: var(--danger); }
 .console-phase-track { display: flex; flex: 1; gap: 5px; list-style: none; margin: 0; padding: 0; }
 .console-phase-track li { flex: 1; color: var(--muted); font-size: 10px; white-space: nowrap; }
-.console-phase-track li > span { display: block; height: 4px; border-radius: 1px; background: var(--line); margin-bottom: 8px; }
+.console-phase-track .console-phase-bar { display: block; height: 4px; border-radius: 1px; background: var(--line); margin-bottom: 8px; }
 .console-phase-track .current { color: var(--accent); }
-.console-phase-track .current > span { background: var(--accent); }
+.console-phase-track .current > .console-phase-bar { background: var(--accent); }
 .console-link-panel { border-left: 1px solid var(--line); padding: 14px 18px; display: flex; flex-direction: column; justify-content: center; gap: 10px; min-width: 0; }
 .console-control-connection { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
 .console-app .dp-status { font-size: 12px; }
@@ -181,7 +181,7 @@
 
 @media (min-width: 1000px) and (min-height: 600px) {
     .console-app { height: 100dvh; min-height: 0; }
-    .console-app .dp-station { height: 100%; display: grid; grid-template-rows: 104px minmax(0, 1fr); }
+    .console-app .dp-station { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
     .console-app .dp-workspace { min-height: 0; }
 }
 @media (min-width: 1000px) and (max-width: 1200px) {
@@ -202,7 +202,6 @@
     .console-enable strong { display: none; }
 }
 @media (min-width: 1000px) and (min-height: 600px) and (max-height: 740px) {
-    .console-app .dp-station { grid-template-rows: 90px minmax(0, 1fr); }
     .console-app .dp-workspace { grid-template-rows: minmax(0, 1fr) minmax(164px, max-content); }
     .console-app .dp-panel { padding: 10px 12px; }
     .console-app .dp-controls { padding: 0; }
@@ -262,3 +261,33 @@
 
 .console-app .dp-group-thrusts .dp-sensor { flex-direction: column; align-items: flex-start; gap: 0; }
 .console-app .dp-group-thrusts .dp-sensor strong { font-size: 14px; }
+
+.console-graphical .dp-station { grid-template-rows: minmax(0, 1fr); }
+.console-graphical .dp-workspace { grid-template-columns: 300px minmax(0, 1fr); grid-template-areas: 'status charts' 'controls charts' 'connection charts' 'diagram charts'; grid-template-rows: max-content max-content max-content minmax(250px, 1fr); overflow: auto; }
+.console-graphical .console-header { grid-area: status; grid-template-columns: minmax(0, 1fr); border-bottom: 0; }
+.console-graphical .console-mission-state { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px 18px; }
+.console-graphical .console-ignition-status { flex-basis: auto; }
+.console-graphical .console-phase-track { flex: none; margin: 0; }
+.console-graphical .console-phase-bar { margin-bottom: 0; }
+.console-graphical .console-phase-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.console-graphical .console-link-panel { grid-area: connection; flex-direction: column; align-items: stretch; border-left: 0; background: #20262b; padding: 12px 18px; }
+.console-graphical .console-connection-actions { flex-wrap: wrap; }
+.console-graphical .console-connection-actions button { flex: 1; padding-inline: 8px; }
+.console-graphical .console-connection-popover { left: 16px; right: auto; }
+.console-graphical .dp-controls { display: flex; flex-direction: column; }
+.console-graphical .dp-controls > .dp-sequence { border: 0; }
+.console-graphical .dp-controls > div + div { border-left: 0; border-top: 1px solid var(--line); }
+.console-graphical .console-unlock { top: 48px; bottom: auto; }
+.console-graphical .console-flow-scroll .plumbing-layout { height: auto; }
+.console-graphical .console-flow-scroll .plumbing-diagram { height: auto !important; }
+@media (max-width: 999px) {
+    .console-graphical .dp-workspace { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'status' 'controls' 'connection' 'diagram' 'charts'; grid-template-rows: auto; overflow: visible; }
+    .console-graphical .dp-diagram { min-height: 260px; }
+}
+.console-graphical .console-flow-scroll { align-items: flex-start; padding-top: 16px; }
+
+.console-link-panel { flex-wrap: wrap; }
+
+.console-history-footer { flex-shrink: 0; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+.console-graphical-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid #4c5962; border-radius: 5px; background: var(--subtle); color: var(--text); font-size: 12px; }
+.console-graphical-button:hover { border-color: var(--accent); color: var(--accent); }
